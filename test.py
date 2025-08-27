@@ -13,12 +13,10 @@ LOCATION_DICT = {
     "홍대입구역": (37.5572, 126.9238),
     "잠실역": (37.5133, 127.1002),
     "부산시청": (35.1796, 129.0756),
-    "대구시청": (35.8714, 128.6014)
+    "대구시청": (35.8714, 128.6014),
+    "광주시청": (35.1595, 126.8526)
 }
 
-# -----------------------------
-# 원(반경 표시용) 좌표 생성 함수
-# -----------------------------
 def circle_polygon(lat, lon, radius_m, n=60):
     pts = []
     for i in range(n):
@@ -29,70 +27,84 @@ def circle_polygon(lat, lon, radius_m, n=60):
     pts.append(pts[0])
     return pts
 
-# -----------------------------
-# Streamlit UI
-# -----------------------------
 st.set_page_config(page_title="범죄 예측 데모", layout="wide")
 st.title("📍 지점 기반 범죄예측 데모")
 
+# -----------------------------
 # 지점 선택
-place_name = st.selectbox("분석할 지점을 선택하세요", list(LOCATION_DICT.keys()))
-center_lat, center_lon = LOCATION_DICT[place_name]
+# -----------------------------
+place_name = st.selectbox("분석할 지점을 선택하세요", ["전체보기"] + list(LOCATION_DICT.keys()))
 
-# 반경 선택
 radius_m = st.slider("반경 (m)", 100, 3000, 800, step=100)
 
-st.write(f"선택된 지점: **{place_name}** ({center_lat:.4f}, {center_lon:.4f})")
-
 # -----------------------------
-# 샘플 데이터 (랜덤 사건 좌표 생성)
-# 실제로는 CSV 업로드해서 사용
+# 지도 데이터 생성
 # -----------------------------
-np.random.seed(42)
-data = pd.DataFrame({
-    "lat": center_lat + np.random.randn(200) * 0.01,
-    "lon": center_lon + np.random.randn(200) * 0.01
-})
+if place_name != "전체보기":
+    center_lat, center_lon = LOCATION_DICT[place_name]
+    st.write(f"선택된 지점: **{place_name}** ({center_lat:.4f}, {center_lon:.4f})")
 
-# -----------------------------
-# 지도 표시
-# -----------------------------
-# 히트맵 레이어
-heatmap_layer = pdk.Layer(
-    "HeatmapLayer",
-    data=data,
-    get_position='[lon, lat]',
-    radiusPixels=40,
-    opacity=0.7
-)
+    # 샘플 데이터 (랜덤 사건 좌표)
+    np.random.seed(42)
+    data = pd.DataFrame({
+        "lat": center_lat + np.random.randn(200) * 0.01,
+        "lon": center_lon + np.random.randn(200) * 0.01
+    })
 
-# 선택 지점 (검은 점)
-center_layer = pdk.Layer(
-    "ScatterplotLayer",
-    data=pd.DataFrame({"lat":[center_lat], "lon":[center_lon]}),
-    get_position='[lon, lat]',
-    get_fill_color=[0, 0, 0, 255],
-    get_radius=10
-)
+    # 지도 레이어
+    heatmap_layer = pdk.Layer(
+        "HeatmapLayer",
+        data=data,
+        get_position='[lon, lat]',
+        radiusPixels=40,
+        opacity=0.7
+    )
 
-# 반경 원
-circle_layer = pdk.Layer(
-    "PolygonLayer",
-    data=[{"polygon": circle_polygon(center_lat, center_lon, radius_m)}],
-    get_polygon="polygon",
-    stroked=True,
-    filled=False,
-    get_line_color=[255, 0, 0],
-    line_width_min_pixels=2
-)
+    center_layer = pdk.Layer(
+        "ScatterplotLayer",
+        data=pd.DataFrame({"lat":[center_lat], "lon":[center_lon]}),
+        get_position='[lon, lat]',
+        get_fill_color=[0, 0, 0, 255],
+        get_radius=10
+    )
 
-# 뷰 설정
-view_state = pdk.ViewState(latitude=center_lat, longitude=center_lon, zoom=13, pitch=0)
+    circle_layer = pdk.Layer(
+        "PolygonLayer",
+        data=[{"polygon": circle_polygon(center_lat, center_lon, radius_m)}],
+        get_polygon="polygon",
+        stroked=True,
+        filled=False,
+        get_line_color=[255, 0, 0],
+        line_width_min_pixels=2
+    )
 
-# 지도 렌더링
-st.pydeck_chart(pdk.Deck(
-    map_style="mapbox://styles/mapbox/light-v9",
-    initial_view_state=view_state,
-    layers=[heatmap_layer, center_layer, circle_layer],
-    tooltip={"text": f"{place_name} 중심\n빨간 원 = 반경 {radius_m}m"}
-))
+    # 선택 지점으로 줌인
+    view_state = pdk.ViewState(
+        latitude=center_lat,
+        longitude=center_lon,
+        zoom=13,   # 줌인
+        pitch=0
+    )
+
+    st.pydeck_chart(pdk.Deck(
+        map_style="mapbox://styles/mapbox/light-v9",
+        initial_view_state=view_state,
+        layers=[heatmap_layer, center_layer, circle_layer],
+        tooltip={"text": f"{place_name} 중심\n빨간 원 = 반경 {radius_m}m"}
+    ))
+
+else:
+    # 전체보기 (대한민국 중심)
+    view_state = pdk.ViewState(
+        latitude=36.5,
+        longitude=127.8,
+        zoom=6,  # 전국 단위 보기
+        pitch=0
+    )
+
+    st.pydeck_chart(pdk.Deck(
+        map_style="mapbox://styles/mapbox/light-v9",
+        initial_view_state=view_state,
+        layers=[]
+    ))
+
