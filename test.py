@@ -1,83 +1,98 @@
 import streamlit as st
-import pydeck as pdk
 import pandas as pd
 import numpy as np
+import pydeck as pdk
+import math
 
-st.title("🕵️‍♂️ 범죄 경로 추적 & 다음 장소 예측")
+# -----------------------------
+# 지점 이름 → 좌표 매핑
+# -----------------------------
+LOCATION_DICT = {
+    "서울시청": (37.5665, 126.9780),
+    "강남역": (37.4979, 127.0276),
+    "홍대입구역": (37.5572, 126.9238),
+    "잠실역": (37.5133, 127.1002),
+    "부산시청": (35.1796, 129.0756),
+    "대구시청": (35.8714, 128.6014)
+}
 
-# 세션 상태 초기화
-if "crime_path" not in st.session_state:
-    st.session_state["crime_path"] = []
+# -----------------------------
+# 원(반경 표시용) 좌표 생성 함수
+# -----------------------------
+def circle_polygon(lat, lon, radius_m, n=60):
+    pts = []
+    for i in range(n):
+        theta = 2 * math.pi * i / n
+        dlat = (radius_m/111_000) * math.cos(theta)
+        dlon = (radius_m/(111_000*max(math.cos(math.radians(lat)), 1e-6))) * math.sin(theta)
+        pts.append([lon + dlon, lat + dlat])
+    pts.append(pts[0])
+    return pts
 
-st.sidebar.header("📍 장소 추가하기")
-lat = st.sidebar.number_input("위도 입력", value=37.5665, format="%.6f")
-lon = st.sidebar.number_input("경도 입력", value=126.9780, format="%.6f")
-if st.sidebar.button("장소 추가"):
-    st.session_state["crime_path"].append((lat, lon))
+# -----------------------------
+# Streamlit UI
+# -----------------------------
+st.set_page_config(page_title="범죄 예측 데모", layout="wide")
+st.title("📍 지점 기반 범죄예측 데모")
 
-# 데이터프레임으로 변환
-path_df = pd.DataFrame(st.session_state["crime_path"], columns=["lat", "lon"])
+# 지점 선택
+place_name = st.selectbox("분석할 지점을 선택하세요", list(LOCATION_DICT.keys()))
+center_lat, center_lon = LOCATION_DICT[place_name]
 
-# 예측 지점 계산 (단순 등속도 외삽)
-pred_point = None
-if len(path_df) >= 2:
-    last = path_df.iloc[-1]
-    prev = path_df.iloc[-2]
-    lat_diff = last["lat"] - prev["lat"]
-    lon_diff = last["lon"] - prev["lon"]
-    pred_point = {"lat": last["lat"] + lat_diff, "lon": last["lon"] + lon_diff}
+# 반경 선택
+radius_m = st.slider("반경 (m)", 100, 3000, 800, step=100)
 
-# 지도 Layer
-layers = []
+st.write(f"선택된 지점: **{place_name}** ({center_lat:.4f}, {center_lon:.4f})")
 
-# 이동 경로
-if not path_df.empty:
-    layers.append(pdk.Layer(
-        "PathLayer",
-        data=[{"path": path_df[["lon", "lat"]].values.tolist()}],
-        get_color=[0, 0, 255],
-        width_scale=10,
-        width_min_pixels=2,
-    ))
-    layers.append(pdk.Layer(
-        "ScatterplotLayer",
-        data=path_df,
-        get_position='[lon, lat]',
-        get_color='[0, 0, 200]',
-        get_radius=80,
-    ))
+# -----------------------------
+# 샘플 데이터 (랜덤 사건 좌표 생성)
+# 실제로는 CSV 업로드해서 사용
+# -----------------------------
+np.random.seed(42)
+data = pd.DataFrame({
+    "lat": center_lat + np.random.randn(200) * 0.01,
+    "lon": center_lon + np.random.randn(200) * 0.01
+})
 
-# 예측 지점
-if pred_point:
-    pred_df = pd.DataFrame([pred_point])
-    layers.append(pdk.Layer(
-        "ScatterplotLayer",
-        data=pred_df,
-        get_position='[lon, lat]',
-        get_color='[200, 0, 0]',
-        get_radius=150,
-    ))
-
+# -----------------------------
 # 지도 표시
-view_state = pdk.ViewState(
-    latitude=lat,
-    longitude=lon,
-    zoom=11,
-    pitch=0,
+# -----------------------------
+# 히트맵 레이어
+heatmap_layer = pdk.Layer(
+    "HeatmapLayer",
+    data=data,
+    get_position='[lon, lat]',
+    radiusPixels=40,
+    opacity=0.7
 )
 
+# 선택 지점 (검은 점)
+center_layer = pdk.Layer(
+    "ScatterplotLayer",
+    data=pd.DataFrame({"lat":[center_lat], "lon":[center_lon]}),
+    get_position='[lon, lat]',
+    get_fill_color=[0, 0, 0, 255],
+    get_radius=10
+)
+
+# 반경 원
+circle_layer = pdk.Layer(
+    "PolygonLayer",
+    data=[{"polygon": circle_polygon(center_lat, center_lon, radius_m)}],
+    get_polygon="polygon",
+    stroked=True,
+    filled=False,
+    get_line_color=[255, 0, 0],
+    line_width_min_pixels=2
+)
+
+# 뷰 설정
+view_state = pdk.ViewState(latitude=center_lat, longitude=center_lon, zoom=13, pitch=0)
+
+# 지도 렌더링
 st.pydeck_chart(pdk.Deck(
     map_style="mapbox://styles/mapbox/light-v9",
     initial_view_state=view_state,
-    layers=layers
+    layers=[heatmap_layer, center_layer, circle_layer],
+    tooltip={"text": f"{place_name} 중심\n빨간 원 = 반경 {radius_m}m"}
 ))
-
-# 현재 경로와 예측 결과 표시
-st.subheader("📊 현재 경로 데이터")
-st.write(path_df)
-
-if pred_point:
-    st.subheader("🔮 예측된 다음 범죄 장소")
-    st.write(pred_point)
-
-
