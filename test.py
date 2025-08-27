@@ -107,4 +107,18 @@ else:
         initial_view_state=view_state,
         layers=[]
     ))
+# 지도 렌더링 (streets 스타일 + 히트맵 투명도 조정)
+st.pydeck_chart(pdk.Deck(
+    map_style="mapbox://styles/mapbox/streets-v11",  # 선명한 도로 지도
+    initial_view_state=view_state,
+    layers=[heatmap_layer, center_layer, circle_layer],
+    tooltip={"text": f"{place_name} 중심\n빨간 원 = 반경 {radius_m}m"}
+))
+heatmap_layer = pdk.Layer(
+    "HeatmapLayer",
+    data=data,
+    get_position='[lon, lat]',
+    radiusPixels=40,
+    opacity=0.5   # 기존 0.7 → 0.5로 조정
+)
 
