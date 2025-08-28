@@ -17,6 +17,9 @@ LOCATION_DICT = {
     "광주시청": (35.1595, 126.8526)
 }
 
+# -----------------------------
+# 원(반경 표시용) 좌표 생성 함수
+# -----------------------------
 def circle_polygon(lat, lon, radius_m, n=60):
     pts = []
     for i in range(n):
@@ -27,20 +30,35 @@ def circle_polygon(lat, lon, radius_m, n=60):
     pts.append(pts[0])
     return pts
 
+# -----------------------------
+# Streamlit UI
+# -----------------------------
 st.set_page_config(page_title="범죄 예측 데모", layout="wide")
 st.title("📍 지점 기반 범죄예측 데모")
 
-# -----------------------------
 # 지점 선택
-# -----------------------------
 place_name = st.selectbox("분석할 지점을 선택하세요", ["전체보기"] + list(LOCATION_DICT.keys()))
-
 radius_m = st.slider("반경 (m)", 100, 3000, 800, step=100)
 
 # -----------------------------
-# 지도 데이터 생성
+# 지도 표시
 # -----------------------------
-if place_name != "전체보기":
+if place_name == "전체보기":
+    # ✅ 대한민국 배경만
+    view_state = pdk.ViewState(
+        latitude=36.5,
+        longitude=127.8,
+        zoom=6,
+        pitch=0
+    )
+    st.pydeck_chart(pdk.Deck(
+        map_style="mapbox://styles/mapbox/streets-v11",  # 선명한 도로 지도
+        initial_view_state=view_state,
+        layers=[]  # 레이어 없음 → 배경만 표시
+    ))
+
+else:
+    # ✅ 선택한 지점만 보여주기
     center_lat, center_lon = LOCATION_DICT[place_name]
     st.write(f"선택된 지점: **{place_name}** ({center_lat:.4f}, {center_lon:.4f})")
 
@@ -51,13 +69,13 @@ if place_name != "전체보기":
         "lon": center_lon + np.random.randn(200) * 0.01
     })
 
-    # 지도 레이어
+    # 레이어 구성
     heatmap_layer = pdk.Layer(
         "HeatmapLayer",
         data=data,
         get_position='[lon, lat]',
         radiusPixels=40,
-        opacity=0.7
+        opacity=0.5
     )
 
     center_layer = pdk.Layer(
@@ -82,43 +100,14 @@ if place_name != "전체보기":
     view_state = pdk.ViewState(
         latitude=center_lat,
         longitude=center_lon,
-        zoom=13,   # 줌인
+        zoom=13,
         pitch=0
     )
 
     st.pydeck_chart(pdk.Deck(
-        map_style="mapbox://styles/mapbox/light-v9",
+        map_style="mapbox://styles/mapbox/streets-v11",
         initial_view_state=view_state,
         layers=[heatmap_layer, center_layer, circle_layer],
         tooltip={"text": f"{place_name} 중심\n빨간 원 = 반경 {radius_m}m"}
     ))
-
-else:
-    # 전체보기 (대한민국 중심)
-    view_state = pdk.ViewState(
-        latitude=36.5,
-        longitude=127.8,
-        zoom=6,  # 전국 단위 보기
-        pitch=0
-    )
-
-    st.pydeck_chart(pdk.Deck(
-        map_style="mapbox://styles/mapbox/light-v9",
-        initial_view_state=view_state,
-        layers=[]
-    ))
-# 지도 렌더링 (streets 스타일 + 히트맵 투명도 조정)
-st.pydeck_chart(pdk.Deck(
-    map_style="mapbox://styles/mapbox/streets-v11",  # 선명한 도로 지도
-    initial_view_state=view_state,
-    layers=[heatmap_layer, center_layer, circle_layer],
-    tooltip={"text": f"{place_name} 중심\n빨간 원 = 반경 {radius_m}m"}
-))
-heatmap_layer = pdk.Layer(
-    "HeatmapLayer",
-    data=data,
-    get_position='[lon, lat]',
-    radiusPixels=40,
-    opacity=0.5   # 기존 0.7 → 0.5로 조정
-)
 
