@@ -44,35 +44,17 @@ radius_m = st.slider("반경 (m)", 100, 3000, 800, step=100)
 # 지도 표시
 # -----------------------------
 if place_name == "전체보기":
-    # ✅ 전국 사건 데이터 생성 (랜덤 예시)
-    np.random.seed(42)
-    nationwide_data = pd.DataFrame({
-        "lat": np.random.uniform(34.0, 38.5, 2000),   # 한국 위도 범위
-        "lon": np.random.uniform(126.0, 129.5, 2000)  # 한국 경도 범위
-    })
-
-    # 히트맵 레이어
-    heatmap_layer = pdk.Layer(
-        "HeatmapLayer",
-        data=nationwide_data,
-        get_position='[lon, lat]',
-        radiusPixels=25,
-        opacity=0.5
-    )
-
-    # 대한민국 전체 뷰
+    # ✅ 대한민국 배경만
     view_state = pdk.ViewState(
         latitude=36.5,
         longitude=127.8,
         zoom=6,
         pitch=0
     )
-
     st.pydeck_chart(pdk.Deck(
-        map_style="mapbox://styles/mapbox/streets-v11",
+        map_style="mapbox://styles/mapbox/streets-v11",  # 선명한 도로 지도
         initial_view_state=view_state,
-        layers=[heatmap_layer],
-        tooltip={"text": "전국 사건 분포 히트맵"}
+        layers=[]  # 레이어 없음 → 배경만 표시
     ))
 
 else:
@@ -80,7 +62,7 @@ else:
     center_lat, center_lon = LOCATION_DICT[place_name]
     st.write(f"선택된 지점: **{place_name}** ({center_lat:.4f}, {center_lon:.4f})")
 
-    # 샘플 데이터 (선택 지점 주변 사건 좌표)
+    # 샘플 데이터 (랜덤 사건 좌표)
     np.random.seed(42)
     data = pd.DataFrame({
         "lat": center_lat + np.random.randn(200) * 0.01,
